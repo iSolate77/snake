@@ -1,13 +1,15 @@
-use bevy::time::FixedTimestep;
 use bevy::prelude::*;
+use bevy::time::FixedTimestep;
 use rand::prelude::random;
 
 const SNAKE_HEAD_COLOR: Color = Color::rgb(0.7, 0.7, 0.7);
 const FOOD_COLOR: Color = Color::rgb(1.0, 0.0, 0.0);
 const SNAKE_SEGMENT_COLOR: Color = Color::rgb(0.3, 0.3, 0.3);
 
-const ARENA_HEIGHT: u32 = 10;
-const ARENA_WIDTH: u32 = 10;
+const ARENA_HEIGHT: u32 = 20;
+const ARENA_WIDTH: u32 = 20;
+
+const FOOD_MAX: u32 = 1;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 struct Position {
@@ -49,6 +51,9 @@ struct SnakeSegments(Vec<Entity>);
 #[derive(Component)]
 struct Food;
 
+#[derive(Component)]
+struct FoodCount(u32);
+
 #[derive(PartialEq, Copy, Clone)]
 enum Direction {
     Left,
@@ -87,7 +92,7 @@ fn spawn_snake(mut commands: Commands, mut segments: ResMut<SnakeSegments>) {
             })
             .insert(SnakeSegment)
             .insert(Position { x: 3, y: 3 })
-            .insert(Size::square(0.8))
+            .insert(Size::square(0.95))
             .id(),
         spawn_segment(commands, Position { x: 3, y: 2 }),
     ]);
@@ -104,7 +109,7 @@ fn spawn_segment(mut commands: Commands, position: Position) -> Entity {
         })
         .insert(SnakeSegment)
         .insert(position)
-        .insert(Size::square(0.65))
+        .insert(Size::square(0.95))
         .id()
 }
 
@@ -192,6 +197,7 @@ fn game_over(
 fn snake_eating(
     mut commands: Commands,
     mut growth_writer: EventWriter<GrowthEvent>,
+    mut food_count: ResMut<FoodCount>,
     food_positions: Query<(Entity, &Position), With<Food>>,
     head_positions: Query<&Position, With<SnakeHead>>,
 ) {
@@ -200,6 +206,7 @@ fn snake_eating(
             if food_pos == head_pos {
                 commands.entity(ent).despawn();
                 growth_writer.send(GrowthEvent);
+                food_count.0 -= 1;
             }
         }
     }
@@ -242,21 +249,25 @@ fn position_translation(windows: Res<Windows>, mut q: Query<(&Position, &mut Tra
     }
 }
 
-fn food_spawner(mut commands: Commands) {
-    commands
-        .spawn_bundle(SpriteBundle {
-            sprite: Sprite {
-                color: FOOD_COLOR,
+fn food_spawner(mut commands: Commands, mut food_count: ResMut<FoodCount>) {
+    if food_count.0 < FOOD_MAX {
+        commands
+            .spawn_bundle(SpriteBundle {
+                sprite: Sprite {
+                    color: FOOD_COLOR,
+                    ..default()
+                },
                 ..default()
-            },
-            ..default()
-        })
-        .insert(Food)
-        .insert(Position {
-            x: (random::<f32>() * ARENA_WIDTH as f32) as i32,
-            y: (random::<f32>() * ARENA_HEIGHT as f32) as i32,
-        })
-        .insert(Size::square(0.8));
+            })
+            .insert(Food)
+            .insert(Position {
+                x: (random::<f32>() * ARENA_WIDTH as f32) as i32,
+                y: (random::<f32>() * ARENA_HEIGHT as f32) as i32,
+            })
+            .insert(Size::square(0.8));
+        // commands.insert_resource(FoodCount(0));
+        food_count.0 += 1;
+    }
 }
 
 fn main() {
@@ -268,6 +279,7 @@ fn main() {
             height: 500.0,
             ..default()
         })
+        .insert_resource(FoodCount(0))
         .add_startup_system(setup_camera)
         .add_startup_system(spawn_snake)
         .insert_resource(SnakeSegments::default())
@@ -283,11 +295,12 @@ fn main() {
                 .with_system(snake_growth.after(snake_eating)),
         )
         .add_system(game_over.after(snake_movement))
-        .add_system_set(
-            SystemSet::new()
-                .with_run_criteria(FixedTimestep::step(1.0))
-                .with_system(food_spawner),
-        )
+        // .add_system_set(
+        //     SystemSet::new()
+        //         .with_run_criteria(FixedTimestep::step(1.0))
+        //         .with_system(food_spawner),
+        // )
+        .add_system(food_spawner)
         .add_system_set_to_stage(
             CoreStage::PostUpdate,
             SystemSet::new()
