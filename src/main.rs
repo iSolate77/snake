@@ -184,12 +184,14 @@ fn game_over(
     mut reader: EventReader<GameOverEvent>,
     segments_res: ResMut<SnakeSegments>,
     food: Query<Entity, With<Food>>,
+    mut food_count: ResMut<FoodCount>,
     segments: Query<Entity, With<SnakeSegment>>,
 ) {
     if reader.iter().next().is_some() {
         for ent in food.iter().chain(segments.iter()) {
             commands.entity(ent).despawn();
         }
+        food_count.0 = 0;
         spawn_snake(commands, segments_res);
     }
 }
@@ -249,8 +251,18 @@ fn position_translation(windows: Res<Windows>, mut q: Query<(&Position, &mut Tra
     }
 }
 
-fn food_spawner(mut commands: Commands, mut food_count: ResMut<FoodCount>) {
+fn food_spawner(mut commands: Commands,
+    mut food_count: ResMut<FoodCount>,
+    segments: Query<(&SnakeSegment, &Position)>,
+) {
     if food_count.0 < FOOD_MAX {
+        let pos = loop {
+            let x = (random::<f32>() * ARENA_WIDTH as f32) as i32;
+            let y = (random::<f32>() * ARENA_WIDTH as f32) as i32;
+            if !segments.iter().any(|(_, p)| p.x == x && p.y == y) {
+                break Position {x, y};
+            }
+        };
         commands
             .spawn_bundle(SpriteBundle {
                 sprite: Sprite {
@@ -260,10 +272,7 @@ fn food_spawner(mut commands: Commands, mut food_count: ResMut<FoodCount>) {
                 ..default()
             })
             .insert(Food)
-            .insert(Position {
-                x: (random::<f32>() * ARENA_WIDTH as f32) as i32,
-                y: (random::<f32>() * ARENA_HEIGHT as f32) as i32,
-            })
+            .insert(pos)
             .insert(Size::square(0.8));
         // commands.insert_resource(FoodCount(0));
         food_count.0 += 1;
